@@ -1,0 +1,9 @@
+# binaries
+*.o
+CSftp
+
+# test outputs
+out/
+
+# vscode
+.vscode/*
