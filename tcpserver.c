@@ -29,7 +29,8 @@ int open_port(int port, socket_t *sock) {
     }
     sock->addr.sin_family = AF_INET;
     sock->addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    if (!is_valid_port(port)) {
+    if (port == 0) {
+        // Try any available port
         int try_port;
         for (try_port = MIN_PORT; try_port <= MAX_PORT; try_port++) {
             sock->addr.sin_port = htons(try_port);

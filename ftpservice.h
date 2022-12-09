@@ -9,6 +9,7 @@
 #define DTP_TIMEOUT_SECONDS 30
 #define PATH_LEN 1024
 #define MAX_NUM_ARGS 4
+#define NUM_CMDS 14
 
 typedef struct connection_s {
     socket_t server_socket;
@@ -26,7 +27,10 @@ typedef struct session_state_s {
 
 typedef enum {
     CMD_USER,
+    CMD_PASS,
     CMD_QUIT,
+    CMD_SYST,
+    CMD_PWD,
     CMD_CWD,
     CMD_CDUP,
     CMD_TYPE,
@@ -34,6 +38,7 @@ typedef enum {
     CMD_STRU,
     CMD_RETR,
     CMD_PASV,
+    CMD_LIST,
     CMD_NLST,
     CMD_INVALID
 } cmd_t;
@@ -45,7 +50,7 @@ typedef struct cmd_map_s {
 
 extern char root_directory[PATH_LEN];
 extern uint8_t hostip_octets[4];
-extern cmd_map_t cmd_map[10];
+extern cmd_map_t cmd_map[NUM_CMDS];
 
 void *handle_session(void *clientfd);
 
@@ -54,6 +59,7 @@ int execute_cmd(cmd_t cmd, int argc, char *args[], session_state_t *state);
 // Command functions
 int login_user(session_state_t *state, int argc, char *args[]);
 int quit_session(session_state_t *state);
+int pwd(session_state_t *state, int argc);
 int cwd(session_state_t *state, int argc, char *args[]);
 int cdup(session_state_t *state, int argc);
 int set_type(session_state_t *state, int argc, char *args[]);

@@ -43,10 +43,14 @@ void *handle_session(void *clientfd) {
         if (recvsize <= 0) {  // client ctrl-c
             break;
         }
+        if (recvbuf[0] == '\n') {
+            continue;
+        }
         if (recvsize > 1023) {
             recvsize = 1023;
         }
         recvbuf[recvsize] = '\0';
+        printf("%s\n", recvbuf);
 
         // Parse command string
         cmdstr = trimstr(strtok_r(recvbuf, " ", &saveptr));
@@ -87,8 +91,16 @@ int execute_cmd(cmd_t cmd, int argc, char *args[], session_state_t *state) {
     switch (cmd) {
         case (CMD_USER):
             return login_user(state, argc, args);
+        case (CMD_PASS):
+            dprintf(state->clientfd, "230 Login successful.\n");
+            return 0;
         case (CMD_QUIT):
             return quit_session(state);
+        case (CMD_SYST):
+            dprintf(state->clientfd, "215 UNIX Type: L8\n");
+            return 0;
+        case (CMD_PWD):
+            return pwd(state, argc);
         case (CMD_CWD):
             return cwd(state, argc, args);
         case (CMD_CDUP):
@@ -103,6 +115,8 @@ int execute_cmd(cmd_t cmd, int argc, char *args[], session_state_t *state) {
             return retrieve_file(state, argc, args);
         case (CMD_PASV):
             return passive_mode(state, argc);
+        case (CMD_LIST):
+            return nlst(state, argc);
         case (CMD_NLST):
             return nlst(state, argc);
         default:
@@ -137,7 +151,7 @@ int login_user(session_state_t *state, int argc, char *args[]) {
     strcpy(state->cwd, root_directory);
     state->is_logged_in = 1;
     printf("USER logged in.\n");
-    dprintf(state->clientfd, "230 Login successful.\n");
+    dprintf(state->clientfd, "331 Please specify the password.\n");
     return 0;
 }
 
@@ -150,6 +164,19 @@ int login_user(session_state_t *state, int argc, char *args[]) {
 int quit_session(session_state_t *state) {
     dprintf(state->clientfd, "221 Goodbye.\n");
     return 1;
+}
+
+/**
+ * @brief TODO
+ * 
+ */
+int pwd(session_state_t *state, int argc) {
+    if (argc != 0) {
+        dprintf(state->clientfd, "501 Incorrect number of parameters.\n");
+        return 0;
+    }
+    dprintf(state->clientfd, "257 \"%s\"\n", state->cwd);
+    return 0;
 }
 
 /**
@@ -349,8 +376,8 @@ int retrieve_file(session_state_t *state, int argc, char *args[]) {
 
     fclose(file);
     file = NULL;
-    printf("RETR %s/%s completed with %u bytes sent.\n",
-            state->cwd, filepath, (unsigned) totalbytes);
+    printf("RETR %s completed with %u bytes sent.\n",
+            filepath, (unsigned) totalbytes);
     dprintf(state->clientfd, "226 Transfer complete.\n");
     close_connection(connection);
     return 0;
@@ -435,7 +462,7 @@ int handle_unknown(session_state_t *state) {
  */
 int open_passive_port(session_state_t *state) {
     connection_t *connection = &state->data_connection;
-    if (!open_port(-1, &connection->server_socket)) {
+    if (!open_port(0, &connection->server_socket)) {
         return 0;
     }
     connection->clientfd = -1;
@@ -500,7 +527,7 @@ cmd_t to_cmd(char *str) {
     if (str == NULL) {
         return CMD_INVALID;
     }
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < NUM_CMDS; i++) {
         cmd_map_t cmd_pair = cmd_map[i];
         if (strcasecmp(str, cmd_pair.cmd_str) == 0) {
             return cmd_pair.cmd;

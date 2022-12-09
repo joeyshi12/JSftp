@@ -18,9 +18,12 @@
 
 char root_directory[PATH_LEN];
 uint8_t hostip_octets[4];
-cmd_map_t cmd_map[10] = {
+cmd_map_t cmd_map[NUM_CMDS] = {
     {"USER", CMD_USER},
+    {"PASS", CMD_PASS},
     {"QUIT", CMD_QUIT},
+    {"SYST", CMD_SYST},
+    {"PWD", CMD_PWD},
     {"CWD", CMD_CWD},
     {"CDUP", CMD_CDUP},
     {"TYPE", CMD_TYPE},
@@ -28,6 +31,7 @@ cmd_map_t cmd_map[10] = {
     {"STRU", CMD_STRU},
     {"RETR", CMD_RETR},
     {"PASV", CMD_PASV},
+    {"LIST", CMD_LIST},
     {"NLST", CMD_NLST}
 };
 
@@ -43,11 +47,7 @@ int get_port(char *str) {
             return -1;
         }
     }
-    int port = atoi(str);
-    if (!is_valid_port(port)) {
-        return -1;
-    }
-    return port;
+    return atoi(str);
 }
 
 /**
@@ -90,7 +90,9 @@ void set_hostip() {
 
 int main(int argc, char **argv) {
     int port;
-    if (argc != 2 || (port = get_port(argv[1])) == -1) {
+    if (argc == 1) {
+        port = 21;
+    } if (argc != 2 || (port = get_port(argv[1])) == -1) {
         usage(argv[0]);
         return 0;
     }
