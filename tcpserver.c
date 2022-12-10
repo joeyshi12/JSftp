@@ -14,7 +14,7 @@
 #include <stdio.h>
 
 /**
- * Binds a new socket to given port if port is valid;
+ * Binds a new socket to given port if port is nonzero;
  * else binds new socket to smallest available port
  *
  * @param port port number
@@ -59,7 +59,7 @@ int open_port(int port, socket_t *sock) {
 
 /**
  * Get port number from given sock
- * 
+ *
  * @param sock socket
  * @return port number
  */

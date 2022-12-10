@@ -78,6 +78,7 @@ void close_connection(connection_t *connection);
 // Helper functions
 cmd_t to_cmd(char *str);
 char *trimstr(char *str);
+int is_trim_char(unsigned char chr);
 int to_absolute_path(char *relpath, char cwd[], char outpath[]);
 
 #endif
