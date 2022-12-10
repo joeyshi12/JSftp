@@ -29,7 +29,7 @@ void *handle_session(void *clientfd) {
     state.data_connection.awaiting_client = 0;
 
     // Respond connection successful
-    dprintf(state.clientfd, "220\r\n");
+    dprintf(state.clientfd, "220 BRUHH\r\n");
 
     // Session loop
     char recvbuf[1024];
@@ -50,6 +50,7 @@ void *handle_session(void *clientfd) {
             recvsize = 1023;
         }
         recvbuf[recvsize] = '\0';
+        printf("%s", recvbuf);
 
         // Parse command string
         cmdstr = trimstr(strtok_r(recvbuf, " ", &saveptr));
