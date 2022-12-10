@@ -174,7 +174,15 @@ int pwd(session_state_t *state, int argc) {
         dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
         return 0;
     }
-    dprintf(state->clientfd, "257 \"%s\"\r\n", state->cwd);
+    int i = 0;
+    while (root_directory[i] != '\0' && state->cwd[i] == root_directory[i]) {
+        i++;
+    }
+    if (strlen(&state->cwd[i]) == 0) {
+        dprintf(state->clientfd, "257 \"/\"\r\n");
+    } else {
+        dprintf(state->clientfd, "257 \"%s\"\r\n", &state->cwd[i]);
+    }
     return 0;
 }
 
