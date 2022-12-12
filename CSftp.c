@@ -19,21 +19,11 @@
 char root_directory[PATH_LEN];
 uint8_t hostip_octets[4];
 cmd_map_t cmd_map[NUM_CMDS] = {
-    {"USER", CMD_USER},
-    {"PASS", CMD_PASS},
-    {"QUIT", CMD_QUIT},
-    {"SYST", CMD_SYST},
-    {"PWD", CMD_PWD},
-    {"CWD", CMD_CWD},
-    {"CDUP", CMD_CDUP},
-    {"TYPE", CMD_TYPE},
-    {"MODE", CMD_MODE},
-    {"STRU", CMD_STRU},
-    {"RETR", CMD_RETR},
-    {"PASV", CMD_PASV},
-    {"LIST", CMD_LIST},
-    {"NLST", CMD_NLST}
-};
+    {"USER", CMD_USER}, {"PASS", CMD_PASS}, {"QUIT", CMD_QUIT},
+    {"SYST", CMD_SYST}, {"PWD", CMD_PWD},   {"CWD", CMD_CWD},
+    {"CDUP", CMD_CDUP}, {"TYPE", CMD_TYPE}, {"MODE", CMD_MODE},
+    {"STRU", CMD_STRU}, {"RETR", CMD_RETR}, {"PORT", CMD_PORT},
+    {"PASV", CMD_PASV}, {"LIST", CMD_LIST}, {"NLST", CMD_NLST}};
 
 /**
  * Get port number from str

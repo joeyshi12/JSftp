@@ -5,14 +5,14 @@
 
 #include "tcpserver.h"
 
-#define USER "cs317"
+#define USER "anonymous"
 #define DTP_TIMEOUT_SECONDS 30
 #define PATH_LEN 1024
 #define MAX_NUM_ARGS 4
-#define NUM_CMDS 14
+#define NUM_CMDS 15
 
 typedef struct connection_s {
-    socket_t server_socket;
+    socket_t socket;
     int clientfd;
     int awaiting_client;
     pthread_t accept_client_t;  // cancel old awaiting connections
@@ -21,6 +21,7 @@ typedef struct connection_s {
 typedef struct session_state_s {
     int clientfd;
     connection_t data_connection;
+    int is_valid_user;
     int is_logged_in;
     char cwd[PATH_LEN];
 } session_state_t;
@@ -37,6 +38,7 @@ typedef enum {
     CMD_MODE,
     CMD_STRU,
     CMD_RETR,
+    CMD_PORT,
     CMD_PASV,
     CMD_LIST,
     CMD_NLST,
@@ -57,8 +59,8 @@ void *handle_session(void *clientfd);
 int execute_cmd(cmd_t cmd, int argc, char *args[], session_state_t *state);
 
 // Command functions
-int login_user(session_state_t *state, int argc, char *args[]);
-int quit_session(session_state_t *state);
+int submit_user(session_state_t *state, int argc, char *args[]);
+int submit_pass(session_state_t *state, int argc);
 int pwd(session_state_t *state, int argc);
 int cwd(session_state_t *state, int argc, char *args[]);
 int cdup(session_state_t *state, int argc);
@@ -66,9 +68,9 @@ int set_type(session_state_t *state, int argc, char *args[]);
 int set_mode(session_state_t *state, int argc, char *args[]);
 int set_file_structure(session_state_t *state, int argc, char *args[]);
 int retrieve_file(session_state_t *state, int argc, char *args[]);
+int data_port(session_state_t *state, int argc, char *args[]);
 int passive_mode(session_state_t *state, int argc);
 int nlst(session_state_t *state, int argc);
-int handle_unknown(session_state_t *state);
 
 // DTP connection handling
 int open_passive_port(session_state_t *state);

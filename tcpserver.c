@@ -58,6 +58,32 @@ int open_port(int port, socket_t *sock) {
 }
 
 /**
+ * Connects socket to given host and port
+ *
+ * @param ipaddr
+ * @param sock
+ * @return 1 if sock successfully connected to host; else 0
+ */
+int connect_to_host(char *host, int port, socket_t *sock) {
+    sock->fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock->fd == -1) {
+        printf("Socket creation failed\n");
+        return 0;
+    }
+    sock->addr.sin_family = AF_INET;
+    sock->addr.sin_addr.s_addr = inet_addr(host);
+    sock->addr.sin_port = htons(port);
+
+    if (connect(sock->fd,
+                (struct sockaddr *) &sock->addr,
+                sizeof(sock->addr)) != 0) {
+        printf("Socket connect failed\n");
+        return 0;
+    }
+    return 1;
+}
+
+/**
  * Get port number from given sock
  *
  * @param sock socket

@@ -24,12 +24,13 @@
 void *handle_session(void *clientfd) {
     session_state_t state;
     state.clientfd = *(int *)clientfd;
+    state.is_valid_user = 0;
     state.is_logged_in = 0;
     state.data_connection.clientfd = -1;
     state.data_connection.awaiting_client = 0;
 
     // Respond connection successful
-    dprintf(state.clientfd, "220 BRUHH\r\n");
+    dprintf(state.clientfd, "220 (CSftp 1.0)\r\n");
 
     // Session loop
     char recvbuf[1024];
@@ -50,7 +51,7 @@ void *handle_session(void *clientfd) {
             recvsize = 1023;
         }
         recvbuf[recvsize] = '\0';
-        printf("%s", recvbuf);
+        printf("<-- %s", recvbuf);
 
         // Parse command string
         cmdstr = trimstr(strtok_r(recvbuf, " ", &saveptr));
@@ -84,18 +85,19 @@ void *handle_session(void *clientfd) {
  * @return 1 if user session should be closed; else 0
  */
 int execute_cmd(cmd_t cmd, int argc, char *args[], session_state_t *state) {
-    if (cmd != CMD_USER && cmd != CMD_QUIT && !state->is_logged_in) {
+    if (cmd != CMD_USER && cmd != CMD_PASS && cmd != CMD_QUIT &&
+        (!state->is_valid_user || !state->is_logged_in)) {
         dprintf(state->clientfd, "530 Please login with USER.\r\n");
         return 0;
     }
     switch (cmd) {
         case (CMD_USER):
-            return login_user(state, argc, args);
+            return submit_user(state, argc, args);
         case (CMD_PASS):
-            dprintf(state->clientfd, "230 Login successful.\r\n");
-            return 0;
+            return submit_pass(state, argc);
         case (CMD_QUIT):
-            return quit_session(state);
+            dprintf(state->clientfd, "221 Goodbye.\r\n");
+            return 1;
         case (CMD_SYST):
             dprintf(state->clientfd, "215 UNIX Type: L8\r\n");
             return 0;
@@ -113,6 +115,8 @@ int execute_cmd(cmd_t cmd, int argc, char *args[], session_state_t *state) {
             return set_file_structure(state, argc, args);
         case (CMD_RETR):
             return retrieve_file(state, argc, args);
+        case (CMD_PORT):
+            return data_port(state, argc, args);
         case (CMD_PASV):
             return passive_mode(state, argc);
         case (CMD_LIST):
@@ -120,55 +124,74 @@ int execute_cmd(cmd_t cmd, int argc, char *args[], session_state_t *state) {
         case (CMD_NLST):
             return nlst(state, argc);
         default:
-            return handle_unknown(state);
+            dprintf(state->clientfd, "500 Unknown command.\r\n");
+            return 0;
     }
 }
 
 /**
- * Sets login state to 1 in session state if username arg is cs317
+ * Sets valid user state to 1 in session state if username arg is cs317
  *
  * @param argc
  * @param args
  * @param state
  * @return 0
  */
-int login_user(session_state_t *state, int argc, char *args[]) {
+int submit_user(session_state_t *state, int argc, char *args[]) {
     if (argc != 1) {
         dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
         return 0;
     }
     if (state->is_logged_in) {
-        dprintf(state->clientfd, "230 User already logged in, proceed.\r\n");
+        dprintf(state->clientfd, "530 Can't change from %s.\r\n", USER);
         return 0;
     }
     if (argc != 1 || strcmp(args[0], USER) != 0) {
-        printf("USER failed login.\r\n");
-        dprintf(state->clientfd, "%s", "530 This FTP server is cs317 only.\r\n");
+        state->is_valid_user = 0;
+        dprintf(state->clientfd, "530 This FTP server is %s only.\r\n", USER);
         return 0;
     }
 
     // Set current working directory for client
     strcpy(state->cwd, root_directory);
-    state->is_logged_in = 1;
-    printf("USER logged in.\r\n");
+    state->is_valid_user = 1;
     dprintf(state->clientfd, "331 Please specify the password.\r\n");
     return 0;
 }
 
 /**
- * Returns 1 to indicate end of session
- *
- * @param state
- * @return 1
+ * Sets login state to 1 if user is valid
+ * 
+ * @param state 
+ * @param argc 
+ * @return int 
  */
-int quit_session(session_state_t *state) {
-    dprintf(state->clientfd, "221 Goodbye.\r\n");
-    return 1;
+int submit_pass(session_state_t *state, int argc) {
+    if (argc != 1) {
+        dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
+        return 0;
+    }
+    if (state->is_logged_in) {
+        dprintf(state->clientfd, "230 Already logged in.\r\n");
+        return 0;
+    }
+    if (!state->is_valid_user) {
+        dprintf(state->clientfd, "503 Login with USER first.\r\n");
+        return 0;
+    }
+    state->is_logged_in = 1;
+    printf("User logged in.\r\n");
+    dprintf(state->clientfd, "230 Login successful.\r\n");
+    return 0;
 }
 
+
 /**
- * @brief TODO
- *
+ * Prints current working directory to client fd
+ * 
+ * @param state 
+ * @param argc 
+ * @return int 
  */
 int pwd(session_state_t *state, int argc) {
     if (argc != 0) {
@@ -392,6 +415,55 @@ int retrieve_file(session_state_t *state, int argc, char *args[]) {
 }
 
 /**
+ * HOST-PORT specification for the data port in data connection
+ * 
+ * @param state 
+ * @param argc 
+ * @param args 
+ * @return int 
+ */
+int data_port(session_state_t *state, int argc, char *args[]) {
+    if (argc != 1) {
+        dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
+        return 0;
+    }
+
+    // Parse tokens
+    int num_tokens;
+    char *tokens[8];
+    char *saveptr = NULL;
+    tokens[0] = trimstr(strtok_r(args[0], ",", &saveptr));
+    for (num_tokens = 1; num_tokens < 8; num_tokens++) {
+        tokens[num_tokens] = trimstr(strtok_r(NULL, ",", &saveptr));
+        if (tokens[num_tokens] == NULL) {
+            break;
+        }
+    }
+
+    if (num_tokens != 6) {
+        dprintf(state->clientfd, "501 Bad PORT format.\r\n");
+        return 0;
+    }
+
+    char datahost[INET_ADDRSTRLEN];
+    strcpy(datahost, tokens[0]);
+    for (int i = 1; i < 4; i++) {
+        strcat(datahost, ".");
+        strcat(datahost, tokens[i]);
+    }
+
+    connection_t *connection = &state->data_connection;
+    int port = (atoi(tokens[4]) << 8) + atoi(tokens[5]);
+    if (connect_to_host(datahost, port, &connection->socket) == 0) {
+        dprintf(state->clientfd, "500 bruuhhh\r\n");
+        return 0;
+    }
+    connection->awaiting_client = 0;
+    connection->clientfd = connection->socket.fd;
+    return 0;
+}
+
+/**
  * Initializes new DTP socket to listen for clients in session state
  *
  * @param state
@@ -409,7 +481,7 @@ int passive_mode(session_state_t *state, int argc) {
         close_connection(connection);
     }
     open_passive_port(state);
-    int port = get_socket_port(&connection->server_socket);
+    int port = get_socket_port(&connection->socket);
     dprintf(state->clientfd,
             "227 Entering Passive Mode (%d,%d,%d,%d,%d,%d)\r\n",
             hostip_octets[0],
@@ -452,17 +524,6 @@ int nlst(session_state_t *state, int argc) {
 }
 
 /**
- * Sends status 500 to client
- *
- * @param state
- * @return 0
- */
-int handle_unknown(session_state_t *state) {
-    dprintf(state->clientfd, "500 Unknown command.\r\n");
-    return 0;
-}
-
-/**
  * Exposes a new port for a DTP connection for a given session state
  *
  * @param state session state
@@ -470,7 +531,7 @@ int handle_unknown(session_state_t *state) {
  */
 int open_passive_port(session_state_t *state) {
     connection_t *connection = &state->data_connection;
-    if (!open_port(0, &connection->server_socket)) {
+    if (!open_port(0, &connection->socket)) {
         return 0;
     }
     connection->clientfd = -1;
@@ -494,7 +555,7 @@ int open_passive_port(session_state_t *state) {
 void *accept_data_client(void *state_data) {
     session_state_t *state = state_data;
     connection_t *connection = &state->data_connection;
-    socket_t *server_socket = &connection->server_socket;
+    socket_t *server_socket = &connection->socket;
 
     // https://linux.die.net/man/2/select
     struct timeval tv;
@@ -615,5 +676,5 @@ void close_connection(connection_t *connection) {
     pthread_cancel(connection->accept_client_t);
     pthread_join(connection->accept_client_t, NULL);
     connection->awaiting_client = 0;
-    close(connection->server_socket.fd);
+    close(connection->socket.fd);
 }
