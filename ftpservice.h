@@ -68,6 +68,7 @@ int set_type(session_state_t *state, int argc, char *args[]);
 int set_mode(session_state_t *state, int argc, char *args[]);
 int set_file_structure(session_state_t *state, int argc, char *args[]);
 int retrieve_file(session_state_t *state, int argc, char *args[]);
+int data_port(session_state_t *state, int argc, char *args[]);
 int passive_mode(session_state_t *state, int argc);
 int nlst(session_state_t *state, int argc);
 

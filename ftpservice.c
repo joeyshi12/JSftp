@@ -116,8 +116,7 @@ int execute_cmd(cmd_t cmd, int argc, char *args[], session_state_t *state) {
         case (CMD_RETR):
             return retrieve_file(state, argc, args);
         case (CMD_PORT):
-            dprintf(state->clientfd, "500 Illegal PORT command.\r\n");
-            return 0;
+            return data_port(state, argc, args);
         case (CMD_PASV):
             return passive_mode(state, argc);
         case (CMD_LIST):
@@ -459,6 +458,67 @@ int nlst(session_state_t *state, int argc) {
     listFiles(connection->clientfd, state->cwd);
     dprintf(state->clientfd, "226 Directory send OK.\r\n");
     close_connection(connection);
+    return 0;
+}
+
+/**
+ * Binds socket to data port
+ * 
+ * @param state 
+ * @param argc 
+ * @param args 
+ * @return 0
+ */
+int data_port(session_state_t *state, int argc, char *args[]) {
+    if (argc != 1) {
+        dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
+        return 0;
+    }
+    char *saveptr = NULL;
+    char *tokens[8];
+    int num_tokens;
+    tokens[0] = trimstr(strtok_r(args[0], ",", &saveptr));
+    for (num_tokens = 1; num_tokens < 8; num_tokens++) {
+        if ((tokens[num_tokens] = trimstr(strtok_r(NULL, ",", &saveptr))) == NULL) {
+            break;
+        }
+    }
+    if (num_tokens != 6) {
+        dprintf(state->clientfd, "500 Illegal PORT command.\r\n");
+        return 0;
+    }
+    char ipaddr[256];
+    strcpy(ipaddr, tokens[0]);
+    for (int i = 1; i < 4; i++) {
+        strcat(ipaddr, ".");
+        strcat(ipaddr, tokens[i]);
+    }
+    printf("%s\n", ipaddr);
+    int port = (atoi(tokens[4]) << 8) + atoi(tokens[5]);
+    printf("%d\n", port);
+    int clientfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (clientfd < 0) {
+        printf("Socket creation error\n");
+        return 0;
+    }
+
+    struct sockaddr_in sin;
+    sin.sin_family = AF_INET;
+    sin.sin_port = htons(port);
+    if (inet_pton(AF_INET, ipaddr, &sin.sin_addr) <= 0) {
+        printf("Invalid IP address\n");
+        return 0;
+    }
+
+    int passivefd = connect(clientfd, (struct sockaddr *)&sin, sizeof(sin));
+    if (passivefd < 0) {
+        printf("Connect failed\n");
+        return 0;
+    }
+
+    state->data_connection.passivefd = passivefd;
+    state->data_connection.clientfd = clientfd;
+    state->data_connection.awaiting_client = 0;
     return 0;
 }
 

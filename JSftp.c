@@ -105,16 +105,23 @@ int main(int argc, char **argv) {
            hostip_octets[3],
            port);
 
-    // Accept clients
-    pthread_t child;
+    // Accept up to 2 clients at once to support finder app
+    pthread_t child1;
+    pthread_t child2;
     int clientfd;
     struct sockaddr_in sin;
     socklen_t addrlen = sizeof(sin);
     while (1) {
         clientfd = accept(serverfd, (struct sockaddr *)&sin, &addrlen);
-        pthread_create(&child, NULL, handle_session, (void*) &clientfd);
+        pthread_create(&child1, NULL, handle_session, (void *)&clientfd);
         printf("FTP session opened (connect).\n");
-        pthread_join(child, NULL);
+
+        clientfd = accept(serverfd, (struct sockaddr *)&sin, &addrlen);
+        pthread_create(&child2, NULL, handle_session, (void *)&clientfd);
+        printf("FTP session opened (connect).\n");
+
+        pthread_join(child1, NULL);
+        pthread_join(child2, NULL);
     }
     return 0;
 }
