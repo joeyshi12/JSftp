@@ -162,10 +162,10 @@ int submit_user(session_state_t *state, int argc, char *args[]) {
 
 /**
  * Sets login state to 1 if user is valid
- * 
- * @param state 
- * @param argc 
- * @return int 
+ *
+ * @param state
+ * @param argc
+ * @return int
  */
 int submit_pass(session_state_t *state, int argc) {
     if (argc != 1) {
@@ -189,10 +189,10 @@ int submit_pass(session_state_t *state, int argc) {
 
 /**
  * Prints current working directory to client fd
- * 
- * @param state 
- * @param argc 
- * @return int 
+ *
+ * @param state
+ * @param argc
+ * @return int
  */
 int pwd(session_state_t *state, int argc) {
     if (argc != 0) {
@@ -510,7 +510,7 @@ void *accept_data_client(void *state_data) {
     }
 
     struct sockaddr_in sin;
-    int addrlen = sizeof(sin);
+    socklen_t addrlen = sizeof(sin);
     connection->clientfd = accept(connection->passivefd, (struct sockaddr *) &sin, &addrlen);
     if (connection->clientfd < 0) {
         dprintf(state->clientfd, "425 Could not open data connection.\r\n");

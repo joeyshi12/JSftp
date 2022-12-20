@@ -2,7 +2,7 @@
  * @file JSftp.c
  * Entry point for FTP server program: creates server socket listening to a
  * given port and accepts connections
- * 
+ *
  */
 
 #include <arpa/inet.h>
@@ -74,7 +74,7 @@ void set_hostip() {
         }
         break;
     }
-    
+
     if (if_addrs != NULL) {
         freeifaddrs(if_addrs);
     }
@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
     pthread_t child;
     int clientfd;
     struct sockaddr_in sin;
-    int addrlen = sizeof(sin);
+    socklen_t addrlen = sizeof(sin);
     while (1) {
         clientfd = accept(serverfd, (struct sockaddr *)&sin, &addrlen);
         pthread_create(&child, NULL, handle_session, (void*) &clientfd);
