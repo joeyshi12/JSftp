@@ -1,3 +1,3 @@
-# ftp.joeyshi.com
+# JSftp
 
 Simple FTP server
