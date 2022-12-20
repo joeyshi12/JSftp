@@ -51,7 +51,6 @@ void *handle_session(void *clientfd) {
             recvsize = 1023;
         }
         recvbuf[recvsize] = '\0';
-        printf("<-- %s", recvbuf);
 
         // Parse command string
         cmdstr = trimstr(strtok_r(recvbuf, " ", &saveptr));
@@ -456,7 +455,8 @@ int nlst(session_state_t *state, int argc) {
     }
     dprintf(state->clientfd, "150 Here comes the directory listing.\r\n");
     listFiles(connection->clientfd, state->cwd);
-    dprintf(state->clientfd, "226 Directory send OK.\r\n");
+    char msg[] = "226 Directory send OK.\r\n";
+    send(state->clientfd, msg, sizeof(msg), MSG_NOSIGNAL);
     close_connection(connection);
     return 0;
 }
@@ -493,9 +493,7 @@ int data_port(session_state_t *state, int argc, char *args[]) {
         strcat(ipaddr, ".");
         strcat(ipaddr, tokens[i]);
     }
-    printf("%s\n", ipaddr);
     int port = (atoi(tokens[4]) << 8) + atoi(tokens[5]);
-    printf("%d\n", port);
     int clientfd = socket(AF_INET, SOCK_STREAM, 0);
     if (clientfd < 0) {
         printf("Socket creation error\n");
@@ -516,9 +514,10 @@ int data_port(session_state_t *state, int argc, char *args[]) {
         return 0;
     }
 
-    state->data_connection.passivefd = passivefd;
+    state->data_connection.passivefd = -1;
     state->data_connection.clientfd = clientfd;
     state->data_connection.awaiting_client = 0;
+    dprintf(state->clientfd, "200 Connect successful.\r\n");
     return 0;
 }
 
@@ -611,10 +610,13 @@ void close_connection(connection_t *connection) {
         close(connection->clientfd);
         connection->clientfd = -1;
     }
+    if (connection->passivefd != -1) {
+        close(connection->passivefd);
+        connection->passivefd = -1;
+    }
     pthread_cancel(connection->accept_client_t);
     pthread_join(connection->accept_client_t, NULL);
     connection->awaiting_client = 0;
-    close(connection->passivefd);
 }
 
 /**
