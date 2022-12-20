@@ -282,7 +282,8 @@ int set_type(session_state_t *state, int argc, char *args[]) {
     } else if (strcasecmp(type, "I") == 0) {
         dprintf(state->clientfd, "200 Set to Image type.\r\n");
     } else {
-        dprintf(state->clientfd, "504 Unsupported type-code. Only type A and I are allowed.\r\n");
+        dprintf(state->clientfd,
+                "504 Unsupported type-code. Only type A and I are allowed.\r\n");
     }
     return 0;
 }

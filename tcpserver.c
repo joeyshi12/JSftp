@@ -27,7 +27,7 @@ int open_port(int port) {
         return -1;
     }
     int options = 1;
-    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void *)&options, sizeof(options))) {
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, (void *)&options, sizeof(options))) {
         printf("Setting socket options failed\n");
         return -1;
     }
