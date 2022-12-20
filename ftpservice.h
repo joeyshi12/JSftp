@@ -78,8 +78,8 @@ void close_connection(connection_t *connection);
 
 // Helper functions
 cmd_t to_cmd(char *str);
+int to_absolute_path(char *relpath, char cwd[], char outpath[]);
 char *trimstr(char *str);
 int istrimmable(unsigned char chr);
-int to_absolute_path(char *relpath, char cwd[], char outpath[]);
 
 #endif

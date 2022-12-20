@@ -26,6 +26,11 @@ int open_port(int port) {
         printf("Socket creation failed\n");
         return -1;
     }
+    int options = 1;
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void *)&options, sizeof(options))) {
+        printf("Setting socket options failed\n");
+        return -1;
+    }
     struct sockaddr_in sin;
     sin.sin_family = AF_INET;
     sin.sin_addr.s_addr = htonl(INADDR_ANY);
