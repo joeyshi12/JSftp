@@ -6,7 +6,7 @@
 #include "tcpserver.h"
 
 #define USER "anonymous"
-#define DTP_TIMEOUT_SECONDS 30
+#define DTP_TIMEOUT_SECONDS 60
 #define PATH_LEN 1024
 #define MAX_NUM_ARGS 4
 #define NUM_CMDS 15
