@@ -15,7 +15,7 @@ ifeq (test,$(firstword $(MAKECMDGOALS)))
 endif
 
 
-all: CSftp
+all: JSftp
 
 #The following lines contain the generic build options
 CC=gcc
@@ -24,7 +24,7 @@ CFLAGS=-g -Werror-implicit-function-declaration
 CLIBS = -pthread
 
 #List all the .o files here that need to be linked
-OBJS=CSftp.o usage.o dir.o tcpserver.o ftpservice.o
+OBJS=JSftp.o usage.o dir.o tcpserver.o ftpservice.o
 
 usage.o: usage.c usage.h
 
@@ -34,18 +34,18 @@ tcpserver.o: tcpserver.c tcpserver.h
 
 ftpservice.o: ftpservice.c ftpservice.h tcpserver.h dir.h
 
-CSftp.o: CSftp.c usage.h ftpservice.h
+JSftp.o: JSftp.c usage.h ftpservice.h
 
-CSftp: $(OBJS)
-	$(CC) -o CSftp $(OBJS) $(CLIBS)
+JSftp: $(OBJS)
+	$(CC) -o JSftp $(OBJS) $(CLIBS)
 
 clean:
 	rm -f *.o
-	rm -f CSftp
+	rm -f JSftp
 
 .PHONY: run test
-run: CSftp
-	./CSftp $(RUN_ARGS)
+run: JSftp
+	./JSftp $(RUN_ARGS)
 
 test: test/test_csftp.py
 	mkdir -p test/out

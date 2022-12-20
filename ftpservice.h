@@ -12,7 +12,7 @@
 #define NUM_CMDS 15
 
 typedef struct connection_s {
-    socket_t socket;
+    int passivefd;
     int clientfd;
     int awaiting_client;
     pthread_t accept_client_t;  // cancel old awaiting connections
@@ -80,7 +80,7 @@ void close_connection(connection_t *connection);
 // Helper functions
 cmd_t to_cmd(char *str);
 char *trimstr(char *str);
-int is_trim_char(unsigned char chr);
+int istrimmable(unsigned char chr);
 int to_absolute_path(char *relpath, char cwd[], char outpath[]);
 
 #endif

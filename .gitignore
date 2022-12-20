@@ -1,6 +1,6 @@
 # binaries
 *.o
-CSftp
+JSftp
 
 # test outputs
 out/

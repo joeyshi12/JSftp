@@ -1,5 +1,5 @@
 /**
- * @file CSftp.c
+ * @file JSftp.c
  * Entry point for FTP server program: creates server socket listening to a
  * given port and accepts connections
  * 
@@ -29,15 +29,17 @@ cmd_map_t cmd_map[NUM_CMDS] = {
  * Get port number from str
  *
  * @param str
- * @return port number if given port str is valid; else -1
+ * @param port output port number
+ * @return 1 if str can be converted to port number; else 0
  */
-int get_port(char *str) {
+int get_port(char *str, int *port) {
     for (int i = 0; str[i] != '\0'; i++) {
         if (!isdigit(str[i])) {
-            return -1;
+            return 0;
         }
     }
-    return atoi(str);
+    *port = atoi(str);
+    return 1;
 }
 
 /**
@@ -80,9 +82,7 @@ void set_hostip() {
 
 int main(int argc, char **argv) {
     int port;
-    if (argc == 1) {
-        port = 21;
-    } if (argc != 2 || (port = get_port(argv[1])) == -1) {
+    if (argc != 2 || get_port(argv[1], &port) == -1) {
         usage(argv[0]);
         return 0;
     }
@@ -94,8 +94,8 @@ int main(int argc, char **argv) {
     set_hostip();
 
     // Start server on port
-    socket_t server_socket;
-    if (!open_port(port, &server_socket)) {
+    int serverfd = open_port(port);
+    if (serverfd == -1) {
         return 0;
     }
     printf("Listening on %d.%d.%d.%d:%d\n",
@@ -108,12 +108,10 @@ int main(int argc, char **argv) {
     // Accept clients
     pthread_t child;
     int clientfd;
+    struct sockaddr_in sin;
+    socklen_t len;
     while (1) {
-        clientfd = accept(
-            server_socket.fd,
-            (struct sockaddr *) &server_socket.addr,
-            &server_socket.addrlen
-        );
+        clientfd = accept(serverfd, (struct sockaddr *)&sin, &len);
         pthread_create(&child, NULL, handle_session, (void*) &clientfd);
         printf("FTP session opened (connect).\n");
         pthread_join(child, NULL);

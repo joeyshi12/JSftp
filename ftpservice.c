@@ -30,7 +30,7 @@ void *handle_session(void *clientfd) {
     state.data_connection.awaiting_client = 0;
 
     // Respond connection successful
-    dprintf(state.clientfd, "220 (CSftp 1.0)\r\n");
+    dprintf(state.clientfd, "220 (JSftp 1.0)\r\n");
 
     // Session loop
     char recvbuf[1024];
@@ -116,7 +116,8 @@ int execute_cmd(cmd_t cmd, int argc, char *args[], session_state_t *state) {
         case (CMD_RETR):
             return retrieve_file(state, argc, args);
         case (CMD_PORT):
-            return data_port(state, argc, args);
+            dprintf(state->clientfd, "500 Illegal PORT command.\r\n");
+            return 0;
         case (CMD_PASV):
             return passive_mode(state, argc);
         case (CMD_LIST):
@@ -198,14 +199,10 @@ int pwd(session_state_t *state, int argc) {
         dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
         return 0;
     }
-    int i = 0;
-    while (root_directory[i] != '\0' && state->cwd[i] == root_directory[i]) {
-        i++;
-    }
-    if (strlen(&state->cwd[i]) == 0) {
+    if (strcmp(state->cwd, root_directory) == 0) {
         dprintf(state->clientfd, "257 \"/\"\r\n");
     } else {
-        dprintf(state->clientfd, "257 \"%s\"\r\n", &state->cwd[i]);
+        dprintf(state->clientfd, "257 \"%s\"\r\n", &state->cwd[strlen(root_directory)]);
     }
     return 0;
 }
@@ -234,7 +231,6 @@ int cwd(session_state_t *state, int argc, char *args[]) {
         return 0;
     }
     closedir(dir);
-
     strcpy(state->cwd, dirpath);
     printf("CWD %s 250\r\n", state->cwd);
     dprintf(state->clientfd, "250 Working directory changed.\r\n");
@@ -288,8 +284,7 @@ int set_type(session_state_t *state, int argc, char *args[]) {
     } else if (strcasecmp(type, "I") == 0) {
         dprintf(state->clientfd, "200 Set to Image type.\r\n");
     } else {
-        dprintf(state->clientfd,
-                "504 Unsupported type-code. Only type A and I are allowed.\r\n");
+        dprintf(state->clientfd, "504 Unsupported type-code. Only type A and I are allowed.\r\n");
     }
     return 0;
 }
@@ -312,8 +307,7 @@ int set_mode(session_state_t *state, int argc, char *args[]) {
     if (strcasecmp(mode, "S") == 0) {
         dprintf(state->clientfd, "200 Set to streaming mode.\r\n");
     } else {
-        dprintf(state->clientfd,
-                "504 Unsupported mode-code. Only type S is allowed.\r\n");
+        dprintf(state->clientfd, "504 Unsupported mode-code. Only type S is allowed.\r\n");
     }
     return 0;
 }
@@ -380,10 +374,9 @@ int retrieve_file(session_state_t *state, int argc, char *args[]) {
         return 0;
     }
 
-    dprintf(state->clientfd,
-            "150 Opening data connection for %s.\r\n", filepath);
+    dprintf(state->clientfd, "150 Opening data connection for %s.\r\n", filepath);
     char buffer[1024];
-    size_t totalbytes;
+    size_t totalbytes = 0;
     size_t bytesread;
     size_t bufoffset;
     size_t byteswrote;
@@ -415,55 +408,6 @@ int retrieve_file(session_state_t *state, int argc, char *args[]) {
 }
 
 /**
- * HOST-PORT specification for the data port in data connection
- * 
- * @param state 
- * @param argc 
- * @param args 
- * @return int 
- */
-int data_port(session_state_t *state, int argc, char *args[]) {
-    if (argc != 1) {
-        dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
-        return 0;
-    }
-
-    // Parse tokens
-    int num_tokens;
-    char *tokens[8];
-    char *saveptr = NULL;
-    tokens[0] = trimstr(strtok_r(args[0], ",", &saveptr));
-    for (num_tokens = 1; num_tokens < 8; num_tokens++) {
-        tokens[num_tokens] = trimstr(strtok_r(NULL, ",", &saveptr));
-        if (tokens[num_tokens] == NULL) {
-            break;
-        }
-    }
-
-    if (num_tokens != 6) {
-        dprintf(state->clientfd, "501 Bad PORT format.\r\n");
-        return 0;
-    }
-
-    char datahost[INET_ADDRSTRLEN];
-    strcpy(datahost, tokens[0]);
-    for (int i = 1; i < 4; i++) {
-        strcat(datahost, ".");
-        strcat(datahost, tokens[i]);
-    }
-
-    connection_t *connection = &state->data_connection;
-    int port = (atoi(tokens[4]) << 8) + atoi(tokens[5]);
-    if (connect_to_host(datahost, port, &connection->socket) == 0) {
-        dprintf(state->clientfd, "500 bruuhhh\r\n");
-        return 0;
-    }
-    connection->awaiting_client = 0;
-    connection->clientfd = connection->socket.fd;
-    return 0;
-}
-
-/**
  * Initializes new DTP socket to listen for clients in session state
  *
  * @param state
@@ -481,15 +425,11 @@ int passive_mode(session_state_t *state, int argc) {
         close_connection(connection);
     }
     open_passive_port(state);
-    int port = get_socket_port(&connection->socket);
+    int port = get_socket_port(connection->passivefd);
     dprintf(state->clientfd,
             "227 Entering Passive Mode (%d,%d,%d,%d,%d,%d)\r\n",
-            hostip_octets[0],
-            hostip_octets[1],
-            hostip_octets[2],
-            hostip_octets[3],
-            port >> 8,
-            port & 0xff);
+            hostip_octets[0], hostip_octets[1], hostip_octets[2],
+            hostip_octets[3], port >> 8, port & 0xff);
     return 0;
 }
 
@@ -512,8 +452,7 @@ int nlst(session_state_t *state, int argc) {
         return 0;
     }
     if (connection->awaiting_client) {
-        dprintf(state->clientfd,
-                "425 Data connection has not been established.\r\n");
+        dprintf(state->clientfd, "425 Data connection has not been established.\r\n");
         return 0;
     }
     dprintf(state->clientfd, "150 Here comes the directory listing.\r\n");
@@ -531,7 +470,8 @@ int nlst(session_state_t *state, int argc) {
  */
 int open_passive_port(session_state_t *state) {
     connection_t *connection = &state->data_connection;
-    if (!open_port(0, &connection->socket)) {
+    connection->passivefd = open_port(0);
+    if (connection->passivefd == -1) {
         return 0;
     }
     connection->clientfd = -1;
@@ -555,7 +495,6 @@ int open_passive_port(session_state_t *state) {
 void *accept_data_client(void *state_data) {
     session_state_t *state = state_data;
     connection_t *connection = &state->data_connection;
-    socket_t *server_socket = &connection->socket;
 
     // https://linux.die.net/man/2/select
     struct timeval tv;
@@ -563,19 +502,16 @@ void *accept_data_client(void *state_data) {
     tv.tv_sec = DTP_TIMEOUT_SECONDS;
     tv.tv_usec = 0;
     FD_ZERO(&readfds);
-    FD_SET(server_socket->fd, &readfds);
-    if (select(server_socket->fd + 1, &readfds, NULL, NULL, &tv) == 0) {
+    FD_SET(connection->passivefd, &readfds);
+    if (select(connection->passivefd + 1, &readfds, NULL, NULL, &tv) == 0) {
         dprintf(state->clientfd, "421 Timeout.\r\n");
         close_connection(connection);
         return NULL;
     }
 
-    connection->clientfd = accept(
-        server_socket->fd,
-        (struct sockaddr *) &server_socket->addr,
-        &server_socket->addrlen
-    );
-
+    struct sockaddr_in sin;
+    socklen_t len;
+    connection->clientfd = accept(connection->passivefd, (struct sockaddr *) &sin, &len);
     if (connection->clientfd < 0) {
         dprintf(state->clientfd, "425 Could not open data connection.\r\n");
         close_connection(connection);
@@ -606,29 +542,19 @@ cmd_t to_cmd(char *str) {
 }
 
 /**
- * Removes trailing whitespace and newline characters from given str
- * https://stackoverflow.com/questions/122616/how-do-i-trim-leading-trailing-whitespace-in-a-standard-way
+ * Close fds of connection and sets connection fields to empty values
  *
- * @param str
- * @return trimmed str
+ * @param connection
  */
-char *trimstr(char *str) {
-    if (str == NULL) {
-        return str;
+void close_connection(connection_t *connection) {
+    if (connection->clientfd != -1) {
+        close(connection->clientfd);
+        connection->clientfd = -1;
     }
-    char *end;
-    while (is_trim_char(*str)) str++;
-    if (*str == 0) {
-        return str;
-    }
-    end = str + strlen(str) - 1;
-    while (end > str && is_trim_char(*end)) end--;
-    end[1] = '\0';
-    return str;
-}
-
-int is_trim_char(unsigned char chr) {
-    return isspace(chr) || chr == '\r' || chr == '\n';
+    pthread_cancel(connection->accept_client_t);
+    pthread_join(connection->accept_client_t, NULL);
+    connection->awaiting_client = 0;
+    close(connection->passivefd);
 }
 
 /**
@@ -640,8 +566,7 @@ int is_trim_char(unsigned char chr) {
  * @return 1 if path is accessible; else 0
  */
 int to_absolute_path(char *relpath, char cwd[], char outpath[]) {
-    if (strstr(relpath, "./") != NULL ||
-        strstr(relpath, "../") != NULL ||
+    if (strstr(relpath, "./") != NULL || strstr(relpath, "../") != NULL ||
         strcmp(relpath, "..") == 0) {
         return 0;
     }
@@ -663,18 +588,21 @@ int to_absolute_path(char *relpath, char cwd[], char outpath[]) {
     return 1;
 }
 
-/**
- * Close fds of connection and sets connection fields to empty values
- *
- * @param connection
- */
-void close_connection(connection_t *connection) {
-    if (connection->clientfd != -1) {
-        close(connection->clientfd);
-        connection->clientfd = -1;
+char *trimstr(char *str) {
+    if (str == NULL) {
+        return str;
     }
-    pthread_cancel(connection->accept_client_t);
-    pthread_join(connection->accept_client_t, NULL);
-    connection->awaiting_client = 0;
-    close(connection->socket.fd);
+    char *end;
+    while (istrimmable(*str)) str++;
+    if (*str == 0) {
+        return str;
+    }
+    end = str + strlen(str) - 1;
+    while (end > str && istrimmable(*end)) end--;
+    end[1] = '\0';
+    return str;
+}
+
+int istrimmable(unsigned char chr) {
+    return isspace(chr) || chr == '\r' || chr == '\n';
 }
