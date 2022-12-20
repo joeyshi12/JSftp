@@ -109,9 +109,9 @@ int main(int argc, char **argv) {
     pthread_t child;
     int clientfd;
     struct sockaddr_in sin;
-    socklen_t len;
+    int addrlen = sizeof(sin);
     while (1) {
-        clientfd = accept(serverfd, (struct sockaddr *)&sin, &len);
+        clientfd = accept(serverfd, (struct sockaddr *)&sin, &addrlen);
         pthread_create(&child, NULL, handle_session, (void*) &clientfd);
         printf("FTP session opened (connect).\n");
         pthread_join(child, NULL);

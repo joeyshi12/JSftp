@@ -510,8 +510,8 @@ void *accept_data_client(void *state_data) {
     }
 
     struct sockaddr_in sin;
-    socklen_t len;
-    connection->clientfd = accept(connection->passivefd, (struct sockaddr *) &sin, &len);
+    int addrlen = sizeof(sin);
+    connection->clientfd = accept(connection->passivefd, (struct sockaddr *) &sin, &addrlen);
     if (connection->clientfd < 0) {
         dprintf(state->clientfd, "425 Could not open data connection.\r\n");
         close_connection(connection);
