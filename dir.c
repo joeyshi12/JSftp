@@ -1,23 +1,6 @@
 #include "dir.h"
+#include <string.h>
 
-/* 
-   Arguments: 
-      fd - a valid open file descriptor. This is not checked for validity
-           or for errors with it is used.
-      directory - a pointer to a null terminated string that names a 
-                  directory
-
-   Returns
-      -1 the named directory does not exist or you don't have permission
-         to read it.
-      -2 insufficient resources to perform request
-
- 
-   This function takes the name of a directory and lists all the regular
-   files and directoies in the directory. 
- 
-
- */
 
 int listFiles(int fd, char * directory) {
 
@@ -33,22 +16,24 @@ int listFiles(int fd, char * directory) {
 
   struct dirent *dirEntry;
   int entriesPrinted = 0;
-  
-  for (dirEntry = readdir(dir);
-       dirEntry;
-       dirEntry = readdir(dir)) {
+
+  char buf[4096];
+  for (dirEntry = readdir(dir); dirEntry; dirEntry = readdir(dir)) {
+    if (dirEntry->d_name[0] == '.') {
+      continue;
+    }
     if (dirEntry->d_type == DT_REG) {  // Regular file
       struct stat buf;
 
       // This call really should check the return value
       // stat returns a structure with the properties of a file
       stat(dirEntry->d_name, &buf);
-
-      dprintf(fd, "F    %-20s     %ld\n", dirEntry->d_name, buf.st_size);
+      
+      dprintf(fd, "-r--r--r--    0 1        0  %12d Jan 1  2022 %s\r\n", buf.st_size, dirEntry->d_name);
     } else if (dirEntry->d_type == DT_DIR) { // Directory
-      dprintf(fd, "D        %s\n", dirEntry->d_name);
+      dprintf(fd, "dr--r--r--    0 1        0  %12d Jan 1  2022 %s\r\n", 0, dirEntry->d_name);
     } else {
-      dprintf(fd, "U        %s\n", dirEntry->d_name);
+      dprintf(fd, "lr--r--r--    0 1        0  %12d Jan 1  2022 %s\r\n", 0, dirEntry->d_name);
     }
     entriesPrinted++;
   }
