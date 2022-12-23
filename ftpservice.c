@@ -615,8 +615,10 @@ void close_connection(connection_t *connection) {
         close(connection->passivefd);
         connection->passivefd = -1;
     }
-    pthread_cancel(connection->accept_client_t);
-    pthread_join(connection->accept_client_t, NULL);
+    if (connection->awaiting_client) {
+        pthread_cancel(connection->accept_client_t);
+        pthread_join(connection->accept_client_t, NULL);
+    }
     connection->awaiting_client = 0;
 }
 
