@@ -1,11 +1,7 @@
 #include "dir.h"
-#include <string.h>
 
 
-int listFiles(int fd, char * directory) {
-
-  // Get resources to see if the directory can be opened for reading
-  
+int listFiles(int fd, char * directory) {  
   DIR * dir = NULL;
   
   dir = opendir(directory);
@@ -16,25 +12,23 @@ int listFiles(int fd, char * directory) {
 
   struct dirent *dirEntry;
   int entriesPrinted = 0;
-
-  char buf[4096];
+  struct stat buf;
   for (dirEntry = readdir(dir); dirEntry; dirEntry = readdir(dir)) {
     if (dirEntry->d_name[0] == '.') {
       continue;
     }
-    if (dirEntry->d_type == DT_REG) {  // Regular file
-      struct stat buf;
-
-      // This call really should check the return value
-      // stat returns a structure with the properties of a file
+    char typechar;
+    buf.st_size = 0;
+    if (dirEntry->d_type == DT_REG) {
       stat(dirEntry->d_name, &buf);
-      
-      dprintf(fd, "-r--r--r--    0 1        0  %12d Jan 1  2022 %s\r\n", buf.st_size, dirEntry->d_name);
-    } else if (dirEntry->d_type == DT_DIR) { // Directory
-      dprintf(fd, "dr--r--r--    0 1        0  %12d Jan 1  2022 %s\r\n", 0, dirEntry->d_name);
+      typechar = '-';
+    } else if (dirEntry->d_type == DT_DIR) {
+      typechar = 'd';
     } else {
-      dprintf(fd, "lr--r--r--    0 1        0  %12d Jan 1  2022 %s\r\n", 0, dirEntry->d_name);
+      typechar = 'l';
     }
+    // TODO: nice-to-have non-hardcoded fields here
+    dprintf(fd, "%cr--r--r--    0 1        0  %12d Jan 1  2022 %s\r\n", typechar, buf.st_size, dirEntry->d_name);
     entriesPrinted++;
   }
   
@@ -42,5 +36,3 @@ int listFiles(int fd, char * directory) {
   closedir(dir);
   return entriesPrinted;
 }
-
-   

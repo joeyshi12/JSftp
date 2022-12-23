@@ -120,8 +120,9 @@ int main(int argc, char **argv) {
         pthread_create(&child2, NULL, handle_session, (void *)&clientfd);
         printf("FTP session opened (connect).\n");
 
-        pthread_join(child1, NULL);
-        pthread_join(child2, NULL);
+        // TODO: must support multi-threading WITHOUT MEMLEAKS
+        // pthread_join(child1, NULL);
+        // pthread_join(child2, NULL);
     }
     return 0;
 }

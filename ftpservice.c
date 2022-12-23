@@ -51,6 +51,7 @@ void *handle_session(void *clientfd) {
             recvsize = 1023;
         }
         recvbuf[recvsize] = '\0';
+        printf("<-- %s", recvbuf);
 
         // Parse command string
         cmdstr = trimstr(strtok_r(recvbuf, " ", &saveptr));
@@ -356,11 +357,13 @@ int retrieve_file(session_state_t *state, int argc, char *args[]) {
         dprintf(state->clientfd, "425 Use PASV first.\r\n");
         return 0;
     }
-    if (connection->awaiting_client) {
-        dprintf(state->clientfd,
-                "425 Data connection has not been established.\r\n");
-        return 0;
-    }
+    // if (connection->awaiting_client) {
+    //     dprintf(state->clientfd,
+    //             "425 Data connection has not been established.\r\n");
+    //     return 0;
+    // }
+    // TODO: wait on data client for all of these types of requests
+    pthread_join(connection->accept_client_t, NULL);
 
     char filepath[PATH_LEN];
     if (to_absolute_path(args[0], state->cwd, filepath) == 0) {
@@ -450,10 +453,11 @@ int nlst(session_state_t *state, int argc) {
         dprintf(state->clientfd, "425 Use PASV first.\r\n");
         return 0;
     }
-    if (connection->awaiting_client) {
-        dprintf(state->clientfd, "425 Data connection has not been established.\r\n");
-        return 0;
-    }
+    // if (connection->awaiting_client) {
+    //     dprintf(state->clientfd, "425 Data connection has not been established.\r\n");
+    //     return 0;
+    // }
+    while (connection->awaiting_client);
     dprintf(state->clientfd, "150 Here comes the directory listing.\r\n");
     listFiles(connection->clientfd, state->cwd);
     char msg[] = "226 Directory send OK.\r\n";
@@ -515,7 +519,7 @@ int data_port(session_state_t *state, int argc, char *args[]) {
         return 0;
     }
 
-    state->data_connection.passivefd = -1;
+    state->data_connection.passivefd = passivefd;
     state->data_connection.clientfd = clientfd;
     state->data_connection.awaiting_client = 0;
     dprintf(state->clientfd, "200 Connect successful.\r\n");
@@ -557,21 +561,22 @@ void *accept_data_client(void *state_data) {
     connection_t *connection = &state->data_connection;
 
     // https://linux.die.net/man/2/select
-    struct timeval tv;
-    fd_set readfds;
-    tv.tv_sec = DTP_TIMEOUT_SECONDS;
-    tv.tv_usec = 0;
-    FD_ZERO(&readfds);
-    FD_SET(connection->passivefd, &readfds);
-    if (select(connection->passivefd + 1, &readfds, NULL, NULL, &tv) == 0) {
-        dprintf(state->clientfd, "421 Timeout.\r\n");
-        close_connection(connection);
-        return NULL;
-    }
+    // struct timeval tv;
+    // fd_set readfds;
+    // tv.tv_sec = DTP_TIMEOUT_SECONDS;
+    // tv.tv_usec = 0;
+    // FD_ZERO(&readfds);
+    // FD_SET(connection->passivefd, &readfds);
+    // if (select(connection->passivefd + 1, &readfds, NULL, NULL, &tv) == 0) {
+    //     dprintf(state->clientfd, "421 Timeout.\r\n");
+    //     close_connection(connection);
+    //     return NULL;
+    // }
 
     struct sockaddr_in sin;
     socklen_t addrlen = sizeof(sin);
     connection->clientfd = accept(connection->passivefd, (struct sockaddr *) &sin, &addrlen);
+    printf("AYO THEY CONNECTED\n");
     if (connection->clientfd < 0) {
         dprintf(state->clientfd, "425 Could not open data connection.\r\n");
         close_connection(connection);
