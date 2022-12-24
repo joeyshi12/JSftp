@@ -1,14 +1,14 @@
 #include "dir.h"
 
 
-int listFiles(int fd, char * directory) {  
+int listFiles(int fd, char * directory) {
   DIR * dir = NULL;
-  
+
   dir = opendir(directory);
   if (!dir) return -1;
-  
+
   // Setup to read the directory. When printing the directory
-  // only print regular files and directories. 
+  // only print regular files and directories.
 
   struct dirent *dirEntry;
   int entriesPrinted = 0;
@@ -31,7 +31,7 @@ int listFiles(int fd, char * directory) {
     dprintf(fd, "%cr--r--r--    0 1        0  %12d Jan 1  2022 %s\r\n", typechar, buf.st_size, dirEntry->d_name);
     entriesPrinted++;
   }
-  
+
   // Release resources
   closedir(dir);
   return entriesPrinted;

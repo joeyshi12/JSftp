@@ -18,13 +18,21 @@ typedef struct connection_s {
     pthread_t accept_client_t;  // cancel old awaiting connections
 } connection_t;
 
-typedef struct session_state_s {
-    int clientfd;
-    connection_t data_connection;
-    int is_valid_user;
-    int is_logged_in;
-    char cwd[PATH_LEN];
+typedef enum {
+    STATE_OPEN,
+    STATE_AWAITING_USER,
+    STATE_AWAITING_PASS,
+    STATE_ACTIVE,
+    STATE_EXITED
 } session_state_t;
+
+typedef struct client_session_s {
+    int clientfd;
+    char cwd[PATH_LEN];
+    connection_t data_connection;
+    session_state_t state;
+    pthread_t session_thread;
+} client_session_t;
 
 typedef enum {
     CMD_USER,
@@ -56,24 +64,24 @@ extern cmd_map_t cmd_map[NUM_CMDS];
 
 void *handle_session(void *clientfd);
 
-int execute_cmd(cmd_t cmd, int argc, char *args[], session_state_t *state);
+int execute_cmd(cmd_t cmd, int argc, char *args[], client_session_t *state);
 
 // Command functions
-int submit_user(session_state_t *state, int argc, char *args[]);
-int submit_pass(session_state_t *state, int argc);
-int pwd(session_state_t *state, int argc);
-int cwd(session_state_t *state, int argc, char *args[]);
-int cdup(session_state_t *state, int argc);
-int set_type(session_state_t *state, int argc, char *args[]);
-int set_mode(session_state_t *state, int argc, char *args[]);
-int set_file_structure(session_state_t *state, int argc, char *args[]);
-int retrieve_file(session_state_t *state, int argc, char *args[]);
-int data_port(session_state_t *state, int argc, char *args[]);
-int passive_mode(session_state_t *state, int argc);
-int nlst(session_state_t *state, int argc);
+int handle_user(client_session_t *state, int argc, char *args[]);
+int handle_pass(client_session_t *state, int argc);
+int handle_pwd(client_session_t *state, int argc);
+int handle_cwd(client_session_t *state, int argc, char *args[]);
+int handle_cdup(client_session_t *state, int argc);
+int handle_type(client_session_t *state, int argc, char *args[]);
+int handle_mode(client_session_t *state, int argc, char *args[]);
+int handle_stru(client_session_t *state, int argc, char *args[]);
+int handle_retr(client_session_t *state, int argc, char *args[]);
+int handle_port(client_session_t *state, int argc, char *args[]);
+int handle_pasv(client_session_t *state, int argc);
+int handle_nlst(client_session_t *state, int argc);
 
 // DTP connection handling
-int open_passive_port(session_state_t *state);
+int open_passive_port(client_session_t *state);
 void *accept_data_client(void *state);
 void close_connection(connection_t *connection);
 
@@ -81,6 +89,6 @@ void close_connection(connection_t *connection);
 cmd_t to_cmd(char *str);
 int to_absolute_path(char *relpath, char cwd[], char outpath[]);
 char *trimstr(char *str);
-int istrimmable(unsigned char chr);
+int istrimchar(unsigned char chr);
 
 #endif

@@ -16,6 +16,10 @@
 #include "ftpservice.h"
 #include "usage.h"
 
+#define MAX_CLIENT_CONNECTIONS 8
+
+client_session_t sessions[MAX_CLIENT_CONNECTIONS];
+
 char root_directory[PATH_LEN];
 uint8_t hostip_octets[4];
 cmd_map_t cmd_map[NUM_CMDS] = {
@@ -80,6 +84,22 @@ void set_hostip() {
     }
 }
 
+int next_session() {
+    int i;
+    for (i = 0; i < MAX_CLIENT_CONNECTIONS; i++) {
+        if (sessions[i].state == STATE_EXITED) {
+            pthread_join(sessions[i].session_thread, NULL);
+            sessions[i].state = STATE_OPEN;
+        }
+    }
+    for (i = 0; i < MAX_CLIENT_CONNECTIONS; i++) {
+        if (sessions[i].state == STATE_OPEN) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 int main(int argc, char **argv) {
     int port;
     if (argc != 2 || get_port(argv[1], &port) == -1) {
@@ -105,24 +125,24 @@ int main(int argc, char **argv) {
            hostip_octets[3],
            port);
 
-    // Accept up to 2 clients at once to support finder app
-    pthread_t child1;
-    pthread_t child2;
     int clientfd;
+    int sessionid;
+    client_session_t *session;
     struct sockaddr_in sin;
     socklen_t addrlen = sizeof(sin);
     while (1) {
         clientfd = accept(serverfd, (struct sockaddr *)&sin, &addrlen);
-        pthread_create(&child1, NULL, handle_session, (void *)&clientfd);
+        sessionid = next_session();
+        if (sessionid == -1) {
+            printf("Max capacity reached: cannot accept client\n");
+            close(clientfd);
+            continue;
+        }
+        session = &sessions[sessionid];
+        session->clientfd = clientfd;
+        session->state = STATE_AWAITING_USER;
+        pthread_create(&session->session_thread, NULL, handle_session, (void *)session);
         printf("FTP session opened (connect).\n");
-
-        clientfd = accept(serverfd, (struct sockaddr *)&sin, &addrlen);
-        pthread_create(&child2, NULL, handle_session, (void *)&clientfd);
-        printf("FTP session opened (connect).\n");
-
-        // TODO: must support multi-threading WITHOUT MEMLEAKS
-        // pthread_join(child1, NULL);
-        // pthread_join(child2, NULL);
     }
     return 0;
 }
