@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
         char *token;
         for (int i = 0; i < 4; i++) {
             token = i == 0 ? strtok(ipaddr, ".") : strtok(NULL, ".");
-            if (get_int(token, &hostip_octets[0]) == 0) {
+            if (get_int(token, &hostip_octets[i]) == 0) {
                 printf("Bad JSFTP_IPV4\n");
                 return 0;
             }
