@@ -23,14 +23,13 @@
 client_session_t sessions[MAX_CLIENT_CONNECTIONS];
 
 char root_directory[PATH_LEN];
-uint8_t hostip_octets[4];
+int hostip_octets[4];
 cmd_map_t cmd_map[NUM_CMDS] = {
     {"USER", CMD_USER}, {"PASS", CMD_PASS}, {"QUIT", CMD_QUIT},
     {"SYST", CMD_SYST}, {"PWD", CMD_PWD},   {"CWD", CMD_CWD},
     {"CDUP", CMD_CDUP}, {"TYPE", CMD_TYPE}, {"MODE", CMD_MODE},
-    {"STRU", CMD_STRU}, {"RETR", CMD_RETR}, {"STOR", CMD_STOR},
-    {"PORT", CMD_PORT}, {"PASV", CMD_PASV}, {"LIST", CMD_LIST},
-    {"NLST", CMD_NLST}};
+    {"STRU", CMD_STRU}, {"RETR", CMD_RETR}, {"PORT", CMD_PORT},
+    {"PASV", CMD_PASV}, {"LIST", CMD_LIST}, {"NLST", CMD_NLST}};
 
 /**
  * Get port number from str
@@ -39,13 +38,16 @@ cmd_map_t cmd_map[NUM_CMDS] = {
  * @param port output port number
  * @return 1 if str can be converted to port number; else 0
  */
-int get_port(char *str, int *port) {
+int get_int(char *str, int *out) {
+    if (out == NULL) {
+        return 0;
+    }
     for (int i = 0; str[i] != '\0'; i++) {
         if (!isdigit(str[i])) {
             return 0;
         }
     }
-    *port = atoi(str);
+    *out = atoi(str);
     return 1;
 }
 
@@ -105,7 +107,7 @@ int next_session() {
 
 int main(int argc, char **argv) {
     int port;
-    if (argc != 2 || get_port(argv[1], &port) == -1) {
+    if (argc != 2 || get_int(argv[1], &port) == -1) {
         usage(argv[0]);
         return 0;
     }
@@ -125,7 +127,19 @@ int main(int argc, char **argv) {
     strcpy(root_directory, rootpath);
 
     // Set IP of host machine
-    set_hostip();
+    char *ipaddr = getenv("JSFTP_IPV4");
+    if (ipaddr == NULL) {
+        set_hostip();
+    } else {
+        char *token;
+        for (int i = 0; i < 4; i++) {
+            token = i == 0 ? strtok(ipaddr, ".") : strtok(NULL, ".");
+            if (get_int(token, &hostip_octets[0]) == 0) {
+                printf("Bad JSFTP_IPV4\n");
+                return 0;
+            }
+        }
+    }
 
     // Start server on port
     int serverfd = open_port(port);
