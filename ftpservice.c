@@ -18,19 +18,14 @@
 /**
  * Main loop for an FTP session of a user with the given control connection fd
  *
- * @param clientfd fd for control connection
+ * @param session_data session bytes for control connection
  * @return NULL
  */
-void *handle_session(void *clientfd) {
-    session_state_t state;
-    state.clientfd = *(int *)clientfd;
-    state.is_valid_user = 0;
-    state.is_logged_in = 0;
-    state.data_connection.clientfd = -1;
-    state.data_connection.awaiting_client = 0;
+void *handle_session(void *session_data) {
+    client_session_t *session = session_data;
 
     // Respond connection successful
-    dprintf(state.clientfd, "220 (JSftp 1.0)\r\n");
+    dprintf(session->clientfd, "220 (JSftp 1.0)\r\n");
 
     // Session loop
     char recvbuf[1024];
@@ -40,7 +35,7 @@ void *handle_session(void *clientfd) {
     int recvsize;
     char *saveptr = NULL;  // for thread-safe strtok_r
     while (1) {
-        recvsize = read(state.clientfd, &recvbuf, sizeof(recvbuf));
+        recvsize = read(session->clientfd, &recvbuf, sizeof(recvbuf));
         if (recvsize <= 0) {  // client ctrl-c
             break;
         }
@@ -63,15 +58,16 @@ void *handle_session(void *clientfd) {
         }
 
         // Execute command
-        if (execute_cmd(to_cmd(cmdstr), argc, args, &state)) {
+        if (execute_cmd(to_cmd(cmdstr), argc, args, session)) {
             break;
         }
     }
 
     // End session
-    close(state.clientfd);
-    close_connection(&state.data_connection);
+    close(session->clientfd);
+    close_connection(&session->data_connection);
     printf("FTP session closed (disconnect).\r\n");
+    session->state = STATE_EXITED;
     return NULL;
 }
 
@@ -81,107 +77,107 @@ void *handle_session(void *clientfd) {
  * @param cmd command type
  * @param argc length of args
  * @param args arguments for command
- * @param state state of current client session
+ * @param session session of current client session
  * @return 1 if user session should be closed; else 0
  */
-int execute_cmd(cmd_t cmd, int argc, char *args[], session_state_t *state) {
+int execute_cmd(cmd_t cmd, int argc, char *args[], client_session_t *session) {
     if (cmd != CMD_USER && cmd != CMD_PASS && cmd != CMD_QUIT &&
-        (!state->is_valid_user || !state->is_logged_in)) {
-        dprintf(state->clientfd, "530 Please login with USER.\r\n");
+        session->state == STATE_AWAITING_USER) {
+        dprintf(session->clientfd, "530 Please login with USER.\r\n");
         return 0;
     }
     switch (cmd) {
         case (CMD_USER):
-            return submit_user(state, argc, args);
+            return handle_user(session, argc, args);
         case (CMD_PASS):
-            return submit_pass(state, argc);
+            return handle_pass(session, argc);
         case (CMD_QUIT):
-            dprintf(state->clientfd, "221 Goodbye.\r\n");
+            dprintf(session->clientfd, "221 Goodbye.\r\n");
             return 1;
         case (CMD_SYST):
-            dprintf(state->clientfd, "215 UNIX Type: L8\r\n");
+            dprintf(session->clientfd, "215 UNIX Type: L8\r\n");
             return 0;
         case (CMD_PWD):
-            return pwd(state, argc);
+            return handle_pwd(session, argc);
         case (CMD_CWD):
-            return cwd(state, argc, args);
+            return handle_cwd(session, argc, args);
         case (CMD_CDUP):
-            return cdup(state, argc);
+            return handle_cdup(session, argc);
         case (CMD_TYPE):
-            return set_type(state, argc, args);
+            return handle_type(session, argc, args);
         case (CMD_MODE):
-            return set_mode(state, argc, args);
+            return handle_mode(session, argc, args);
         case (CMD_STRU):
-            return set_file_structure(state, argc, args);
+            return handle_stru(session, argc, args);
         case (CMD_RETR):
-            return retrieve_file(state, argc, args);
+            return handle_retr(session, argc, args);
         case (CMD_PORT):
-            return data_port(state, argc, args);
+            return handle_port(session, argc, args);
         case (CMD_PASV):
-            return passive_mode(state, argc);
+            return handle_pasv(session, argc);
         case (CMD_LIST):
-            return nlst(state, argc);
+            return handle_nlst(session, argc);
         case (CMD_NLST):
-            return nlst(state, argc);
+            return handle_nlst(session, argc);
         default:
-            dprintf(state->clientfd, "500 Unknown command.\r\n");
+            dprintf(session->clientfd, "500 Unknown command.\r\n");
             return 0;
     }
 }
 
 /**
- * Sets valid user state to 1 in session state if username arg is cs317
+ * Sets valid user session to 1 in session session if username arg is cs317
  *
  * @param argc
  * @param args
- * @param state
+ * @param session
  * @return 0
  */
-int submit_user(session_state_t *state, int argc, char *args[]) {
+int handle_user(client_session_t *session, int argc, char *args[]) {
     if (argc != 1) {
-        dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
+        dprintf(session->clientfd, "501 Incorrect number of parameters.\r\n");
         return 0;
     }
-    if (state->is_logged_in) {
-        dprintf(state->clientfd, "530 Can't change from %s.\r\n", USER);
+    if (session->state == STATE_ACTIVE) {
+        dprintf(session->clientfd, "530 Can't change from %s.\r\n", USER);
         return 0;
     }
     if (argc != 1 || strcmp(args[0], USER) != 0) {
-        state->is_valid_user = 0;
-        dprintf(state->clientfd, "530 This FTP server is %s only.\r\n", USER);
+        session->state = STATE_AWAITING_USER;
+        dprintf(session->clientfd, "530 This FTP server is %s only.\r\n", USER);
         return 0;
     }
 
     // Set current working directory for client
-    strcpy(state->cwd, root_directory);
-    state->is_valid_user = 1;
-    dprintf(state->clientfd, "331 Please specify the password.\r\n");
+    strcpy(session->cwd, root_directory);
+    session->state = STATE_AWAITING_PASS;
+    dprintf(session->clientfd, "331 Please specify the password.\r\n");
     return 0;
 }
 
 /**
- * Sets login state to 1 if user is valid
+ * Sets login session to 1 if user is valid
  *
- * @param state
+ * @param session
  * @param argc
  * @return int
  */
-int submit_pass(session_state_t *state, int argc) {
+int handle_pass(client_session_t *session, int argc) {
     if (argc != 1) {
-        dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
+        dprintf(session->clientfd, "501 Incorrect number of parameters.\r\n");
         return 0;
     }
-    if (state->is_logged_in) {
-        dprintf(state->clientfd, "230 Already logged in.\r\n");
+    if (session->state == STATE_ACTIVE) {
+        dprintf(session->clientfd, "230 Already logged in.\r\n");
         return 0;
     }
-    if (!state->is_valid_user) {
-        dprintf(state->clientfd, "503 Login with USER first.\r\n");
+    if (session->state != STATE_AWAITING_PASS) {
+        dprintf(session->clientfd, "503 Login with USER first.\r\n");
         return 0;
     }
-    state->is_logged_in = 1;
+    session->state = STATE_ACTIVE;
     printf("User logged in.\r\n");
-    dprintf(state->clientfd, "230 Login successful.\r\n");
+    dprintf(session->clientfd, "230 Login successful.\r\n");
     return 0;
 }
 
@@ -189,101 +185,101 @@ int submit_pass(session_state_t *state, int argc) {
 /**
  * Prints current working directory to client fd
  *
- * @param state
+ * @param session
  * @param argc
  * @return int
  */
-int pwd(session_state_t *state, int argc) {
+int handle_pwd(client_session_t *session, int argc) {
     if (argc != 0) {
-        dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
+        dprintf(session->clientfd, "501 Incorrect number of parameters.\r\n");
         return 0;
     }
-    if (strcmp(state->cwd, root_directory) == 0) {
-        dprintf(state->clientfd, "257 \"/\"\r\n");
+    if (strcmp(session->cwd, root_directory) == 0) {
+        dprintf(session->clientfd, "257 \"/\"\r\n");
     } else {
-        dprintf(state->clientfd, "257 \"%s\"\r\n", &state->cwd[strlen(root_directory)]);
+        dprintf(session->clientfd, "257 \"%s\"\r\n", &session->cwd[strlen(root_directory)]);
     }
     return 0;
 }
 
 /**
- * Changes CWD in user state to the given relative path arg[0]
+ * Changes CWD in user session to the given relative path arg[0]
  *
- * @param state
+ * @param session
  * @param argc
  * @param args
  * @return 0
  */
-int cwd(session_state_t *state, int argc, char *args[]) {
+int handle_cwd(client_session_t *session, int argc, char *args[]) {
     if (argc != 1) {
-        dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
+        dprintf(session->clientfd, "501 Incorrect number of parameters.\r\n");
         return 0;
     }
     char dirpath[PATH_LEN];
-    if (to_absolute_path(args[0], state->cwd, dirpath) == 0) {
-        dprintf(state->clientfd, "550 Failed to change directory.\r\n");
+    if (to_absolute_path(args[0], session->cwd, dirpath) == 0) {
+        dprintf(session->clientfd, "550 Failed to change directory.\r\n");
         return 0;
     }
     DIR *dir = opendir(dirpath);
     if (dir == NULL) {
-        dprintf(state->clientfd, "550 No such directory.\r\n");
+        dprintf(session->clientfd, "550 No such directory.\r\n");
         return 0;
     }
     closedir(dir);
-    strcpy(state->cwd, dirpath);
-    printf("CWD %s 250\r\n", state->cwd);
-    dprintf(state->clientfd, "250 Working directory changed.\r\n");
+    strcpy(session->cwd, dirpath);
+    printf("CWD %s 250\r\n", session->cwd);
+    dprintf(session->clientfd, "250 Working directory changed.\r\n");
     return 0;
 }
 
 /**
  * Sets CWD for client session to parent directory of CWD if CWD is not root
  *
- * @param state
+ * @param session
  * @param argc
  * @return 0
  */
-int cdup(session_state_t *state, int argc) {
+int handle_cdup(client_session_t *session, int argc) {
     if (argc != 0) {
-        dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
+        dprintf(session->clientfd, "501 Incorrect number of parameters.\r\n");
         return 0;
     }
-    if (strcmp(state->cwd, root_directory) == 0) {
-        dprintf(state->clientfd, "550 Directory not accessible.\r\n");
+    if (strcmp(session->cwd, root_directory) == 0) {
+        dprintf(session->clientfd, "550 Directory not accessible.\r\n");
         return 0;
     }
 
     // Set last occurrance of '/' to '\0'
-    char *end = state->cwd + strlen(state->cwd) - 1;
+    char *end = session->cwd + strlen(session->cwd) - 1;
     while ((unsigned char)*end != '/') end--;
     *end = '\0';
 
-    printf("CDUP 250, CWD=%s\r\n", state->cwd);
-    dprintf(state->clientfd, "250 Working directory changed.\r\n");
+    printf("CDUP 250, CWD=%s\r\n", session->cwd);
+    dprintf(session->clientfd, "250 Working directory changed.\r\n");
     return 0;
 }
 
 /**
  * Sends status 200 if type arg is a valid type; else sends error status code
  *
- * @param state
+ * @param session
  * @param argc
  * @param args
  * @return 0
  */
-int set_type(session_state_t *state, int argc, char *args[]) {
+int handle_type(client_session_t *session, int argc, char *args[]) {
     if (argc != 1) {
-        dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
+        dprintf(session->clientfd, "501 Incorrect number of parameters.\r\n");
         return 0;
     }
 
     char *type = args[0];
     if (strcasecmp(type, "A") == 0) {
-        dprintf(state->clientfd, "200 Set to ASCII type.\r\n");
+        dprintf(session->clientfd, "200 Set to ASCII type.\r\n");
     } else if (strcasecmp(type, "I") == 0) {
-        dprintf(state->clientfd, "200 Set to Image type.\r\n");
+        dprintf(session->clientfd, "200 Set to Image type.\r\n");
     } else {
-        dprintf(state->clientfd,
+        dprintf(session->clientfd,
                 "504 Unsupported type-code. Only type A and I are allowed.\r\n");
     }
     return 0;
@@ -292,22 +288,22 @@ int set_type(session_state_t *state, int argc, char *args[]) {
 /**
  * Sends status 200 if type arg is a valid mode; else sends error status code
  *
- * @param state
+ * @param session
  * @param argc
  * @param args
  * @return 0
  */
-int set_mode(session_state_t *state, int argc, char *args[]) {
+int handle_mode(client_session_t *session, int argc, char *args[]) {
     if (argc != 1) {
-        dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
+        dprintf(session->clientfd, "501 Incorrect number of parameters.\r\n");
         return 0;
     }
 
     char *mode = args[0];
     if (strcasecmp(mode, "S") == 0) {
-        dprintf(state->clientfd, "200 Set to streaming mode.\r\n");
+        dprintf(session->clientfd, "200 Set to streaming mode.\r\n");
     } else {
-        dprintf(state->clientfd, "504 Unsupported mode-code. Only type S is allowed.\r\n");
+        dprintf(session->clientfd, "504 Unsupported mode-code. Only type S is allowed.\r\n");
     }
     return 0;
 }
@@ -316,22 +312,22 @@ int set_mode(session_state_t *state, int argc, char *args[]) {
  * Sends status 200 if file_structure arg is a valid file structure;
  * else sends error code
  *
- * @param state
+ * @param session
  * @param argc
  * @param args
  * @return 0
  */
-int set_file_structure(session_state_t *state, int argc, char *args[]) {
+int handle_stru(client_session_t *session, int argc, char *args[]) {
     if (argc != 1) {
-        dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
+        dprintf(session->clientfd, "501 Incorrect number of parameters.\r\n");
         return 0;
     }
 
     char *file_structure = args[0];
     if (strcasecmp(file_structure, "F") == 0) {
-        dprintf(state->clientfd, "200 Set to file structure.\r\n");
+        dprintf(session->clientfd, "200 Set to file structure.\r\n");
     } else {
-        dprintf(state->clientfd,
+        dprintf(session->clientfd,
                 "504 Unsupported structure-code. Only type F is allowed.\r\n");
     }
     return 0;
@@ -341,42 +337,41 @@ int set_file_structure(session_state_t *state, int argc, char *args[]) {
  * Writes bytes from user input filename to DTP client fd if file exists
  * https://idiotdeveloper.com/file-transfer-using-tcp-socket-in-c/
  *
- * @param state
+ * @param session
  * @param argc
  * @param args
  * @return 0
  */
-int retrieve_file(session_state_t *state, int argc, char *args[]) {
+int handle_retr(client_session_t *session, int argc, char *args[]) {
     if (argc != 1) {
-        dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
+        dprintf(session->clientfd, "501 Incorrect number of parameters.\r\n");
         return 0;
     }
 
-    connection_t *connection = &state->data_connection;
+    connection_t *connection = &session->data_connection;
     if (!connection->awaiting_client && connection->clientfd == -1) {
-        dprintf(state->clientfd, "425 Use PASV first.\r\n");
+        dprintf(session->clientfd, "425 Use PASV first.\r\n");
         return 0;
     }
     // if (connection->awaiting_client) {
-    //     dprintf(state->clientfd,
+    //     dprintf(session->clientfd,
     //             "425 Data connection has not been established.\r\n");
     //     return 0;
     // }
-    // TODO: wait on data client for all of these types of requests
     pthread_join(connection->accept_client_t, NULL);
 
     char filepath[PATH_LEN];
-    if (to_absolute_path(args[0], state->cwd, filepath) == 0) {
-        dprintf(state->clientfd, "550 File path not allowed.\r\n");
+    if (to_absolute_path(args[0], session->cwd, filepath) == 0) {
+        dprintf(session->clientfd, "550 File path not allowed.\r\n");
         return 0;
     }
     FILE *file = fopen(filepath, "r");
     if (file == NULL) {
-        dprintf(state->clientfd, "550 File does not exist.\r\n");
+        dprintf(session->clientfd, "550 File does not exist.\r\n");
         return 0;
     }
 
-    dprintf(state->clientfd, "150 Opening data connection for %s.\r\n", filepath);
+    dprintf(session->clientfd, "150 Opening data connection for %s.\r\n", filepath);
     char buffer[1024];
     size_t totalbytes = 0;
     size_t bytesread;
@@ -391,7 +386,7 @@ int retrieve_file(session_state_t *state, int argc, char *args[]) {
                 bytesread - bufoffset
             );
             if (byteswrote <= 0) {
-                dprintf(state->clientfd, "550 Could not send file.\r\n");
+                dprintf(session->clientfd, "550 Could not send file.\r\n");
                 close_connection(connection);
                 return 0;
             }
@@ -404,31 +399,31 @@ int retrieve_file(session_state_t *state, int argc, char *args[]) {
     file = NULL;
     printf("RETR %s completed with %u bytes sent.\r\n",
             filepath, (unsigned) totalbytes);
-    dprintf(state->clientfd, "226 Transfer complete.\r\n");
+    dprintf(session->clientfd, "226 Transfer complete.\r\n");
     close_connection(connection);
     return 0;
 }
 
 /**
- * Initializes new DTP socket to listen for clients in session state
+ * Initializes new DTP socket to listen for clients in session session
  *
- * @param state
+ * @param session
  * @param argc
  * @return 0
  */
-int passive_mode(session_state_t *state, int argc) {
+int handle_pasv(client_session_t *session, int argc) {
     if (argc != 0) {
-        dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
+        dprintf(session->clientfd, "501 Incorrect number of parameters.\r\n");
         return 0;
     }
 
-    connection_t *connection = &state->data_connection;
+    connection_t *connection = &session->data_connection;
     if (connection->awaiting_client || connection->clientfd != -1) {
         close_connection(connection);
     }
-    open_passive_port(state);
+    open_passive_port(session);
     int port = get_socket_port(connection->passivefd);
-    dprintf(state->clientfd,
+    dprintf(session->clientfd,
             "227 Entering Passive Mode (%d,%d,%d,%d,%d,%d)\r\n",
             hostip_octets[0], hostip_octets[1], hostip_octets[2],
             hostip_octets[3], port >> 8, port & 0xff);
@@ -438,45 +433,47 @@ int passive_mode(session_state_t *state, int argc) {
 /**
  * Lists directory entries in CWD to DTP client fd
  *
- * @param state
+ * @param session
  * @param argc
  * @return 0
  */
-int nlst(session_state_t *state, int argc) {
+int handle_nlst(client_session_t *session, int argc) {
     if (argc != 0) {
-        dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
+        dprintf(session->clientfd, "501 Incorrect number of parameters.\r\n");
         return 0;
     }
 
-    connection_t *connection = &state->data_connection;
+    connection_t *connection = &session->data_connection;
     if (!connection->awaiting_client && connection->clientfd == -1) {
-        dprintf(state->clientfd, "425 Use PASV first.\r\n");
+        dprintf(session->clientfd, "425 Use PASV first.\r\n");
         return 0;
     }
+
     // if (connection->awaiting_client) {
-    //     dprintf(state->clientfd, "425 Data connection has not been established.\r\n");
+    //     dprintf(session->clientfd, "425 Data connection has not been established.\r\n");
     //     return 0;
     // }
-    while (connection->awaiting_client);
-    dprintf(state->clientfd, "150 Here comes the directory listing.\r\n");
-    listFiles(connection->clientfd, state->cwd);
+    pthread_join(connection->accept_client_t, NULL);
+
+    dprintf(session->clientfd, "150 Here comes the directory listing.\r\n");
+    listFiles(connection->clientfd, session->cwd);
     char msg[] = "226 Directory send OK.\r\n";
-    send(state->clientfd, msg, sizeof(msg), MSG_NOSIGNAL);
+    send(session->clientfd, msg, sizeof(msg), MSG_NOSIGNAL);
     close_connection(connection);
     return 0;
 }
 
 /**
  * Binds socket to data port
- * 
- * @param state 
- * @param argc 
- * @param args 
+ *
+ * @param session
+ * @param argc
+ * @param args
  * @return 0
  */
-int data_port(session_state_t *state, int argc, char *args[]) {
+int handle_port(client_session_t *session, int argc, char *args[]) {
     if (argc != 1) {
-        dprintf(state->clientfd, "501 Incorrect number of parameters.\r\n");
+        dprintf(session->clientfd, "501 Incorrect number of parameters.\r\n");
         return 0;
     }
     char *saveptr = NULL;
@@ -489,7 +486,7 @@ int data_port(session_state_t *state, int argc, char *args[]) {
         }
     }
     if (num_tokens != 6) {
-        dprintf(state->clientfd, "500 Illegal PORT command.\r\n");
+        dprintf(session->clientfd, "500 Illegal PORT command.\r\n");
         return 0;
     }
     char ipaddr[256];
@@ -519,21 +516,21 @@ int data_port(session_state_t *state, int argc, char *args[]) {
         return 0;
     }
 
-    state->data_connection.passivefd = passivefd;
-    state->data_connection.clientfd = clientfd;
-    state->data_connection.awaiting_client = 0;
-    dprintf(state->clientfd, "200 Connect successful.\r\n");
+    session->data_connection.passivefd = passivefd;
+    session->data_connection.clientfd = clientfd;
+    session->data_connection.awaiting_client = 0;
+    dprintf(session->clientfd, "200 Connect successful.\r\n");
     return 0;
 }
 
 /**
- * Exposes a new port for a DTP connection for a given session state
+ * Exposes a new port for a DTP connection for a given session session
  *
- * @param state session state
+ * @param session session session
  * @return 1 on successful DTP socket bind; else 0
  */
-int open_passive_port(session_state_t *state) {
-    connection_t *connection = &state->data_connection;
+int open_passive_port(client_session_t *session) {
+    connection_t *connection = &session->data_connection;
     connection->passivefd = open_port(0);
     if (connection->passivefd == -1) {
         return 0;
@@ -544,7 +541,7 @@ int open_passive_port(session_state_t *state) {
         &connection->accept_client_t,
         NULL,
         accept_data_client,
-        (void *)state
+        (void *)session
     );
     return 1;
 }
@@ -553,32 +550,31 @@ int open_passive_port(session_state_t *state) {
  * Awaits DTP client to accept or times out if client does not connect
  * within DTP_TIMEOUT_SECONDS
  *
- * @param state_data bytes representing client control session state
+ * @param session_data bytes representing client control session session
  * @return NULL
  */
-void *accept_data_client(void *state_data) {
-    session_state_t *state = state_data;
-    connection_t *connection = &state->data_connection;
+void *accept_data_client(void *session_data) {
+    client_session_t *session = session_data;
+    connection_t *connection = &session->data_connection;
 
     // https://linux.die.net/man/2/select
-    // struct timeval tv;
-    // fd_set readfds;
-    // tv.tv_sec = DTP_TIMEOUT_SECONDS;
-    // tv.tv_usec = 0;
-    // FD_ZERO(&readfds);
-    // FD_SET(connection->passivefd, &readfds);
-    // if (select(connection->passivefd + 1, &readfds, NULL, NULL, &tv) == 0) {
-    //     dprintf(state->clientfd, "421 Timeout.\r\n");
-    //     close_connection(connection);
-    //     return NULL;
-    // }
+    struct timeval tv;
+    fd_set readfds;
+    tv.tv_sec = DTP_TIMEOUT_SECONDS;
+    tv.tv_usec = 0;
+    FD_ZERO(&readfds);
+    FD_SET(connection->passivefd, &readfds);
+    if (select(connection->passivefd + 1, &readfds, NULL, NULL, &tv) == 0) {
+        dprintf(session->clientfd, "421 Timeout.\r\n");
+        close_connection(connection);
+        return NULL;
+    }
 
     struct sockaddr_in sin;
     socklen_t addrlen = sizeof(sin);
     connection->clientfd = accept(connection->passivefd, (struct sockaddr *) &sin, &addrlen);
-    printf("AYO THEY CONNECTED\n");
     if (connection->clientfd < 0) {
-        dprintf(state->clientfd, "425 Could not open data connection.\r\n");
+        dprintf(session->clientfd, "425 Could not open data connection.\r\n");
         close_connection(connection);
         return NULL;
     }
@@ -663,16 +659,16 @@ char *trimstr(char *str) {
         return str;
     }
     char *end;
-    while (istrimmable(*str)) str++;
+    while (istrimchar(*str)) str++;
     if (*str == 0) {
         return str;
     }
     end = str + strlen(str) - 1;
-    while (end > str && istrimmable(*end)) end--;
+    while (end > str && istrimchar(*end)) end--;
     end[1] = '\0';
     return str;
 }
 
-int istrimmable(unsigned char chr) {
+int istrimchar(unsigned char chr) {
     return isspace(chr) || chr == '\r' || chr == '\n';
 }
