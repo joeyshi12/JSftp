@@ -28,7 +28,7 @@ int listFiles(int fd, char * directory) {
       typechar = 'l';
     }
     // TODO: nice-to-have non-hardcoded fields here
-    dprintf(fd, "%cr--r--r--    0 1        0  %12d Jan 1  2022 %s\r\n", typechar, buf.st_size, dirEntry->d_name);
+    dprintf(fd, "%cr--r--r--    0 1        0  %12lld Jan 1  2022 %s\r\n", typechar, buf.st_size, dirEntry->d_name);
     entriesPrinted++;
   }
 

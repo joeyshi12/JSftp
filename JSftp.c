@@ -12,6 +12,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <dirent.h>
 
 #include "ftpservice.h"
 #include "usage.h"
@@ -26,8 +28,9 @@ cmd_map_t cmd_map[NUM_CMDS] = {
     {"USER", CMD_USER}, {"PASS", CMD_PASS}, {"QUIT", CMD_QUIT},
     {"SYST", CMD_SYST}, {"PWD", CMD_PWD},   {"CWD", CMD_CWD},
     {"CDUP", CMD_CDUP}, {"TYPE", CMD_TYPE}, {"MODE", CMD_MODE},
-    {"STRU", CMD_STRU}, {"RETR", CMD_RETR}, {"PORT", CMD_PORT},
-    {"PASV", CMD_PASV}, {"LIST", CMD_LIST}, {"NLST", CMD_NLST}};
+    {"STRU", CMD_STRU}, {"RETR", CMD_RETR}, {"STOR", CMD_STOR},
+    {"PORT", CMD_PORT}, {"PASV", CMD_PASV}, {"LIST", CMD_LIST},
+    {"NLST", CMD_NLST}};
 
 /**
  * Get port number from str
@@ -108,7 +111,18 @@ int main(int argc, char **argv) {
     }
 
     // Set current working directory as program root directory
-    getcwd(root_directory, sizeof(root_directory));
+    char *rootpath = getenv("JSFTP_ROOT");
+    if (rootpath == NULL) {
+        printf("Missing JSFTP_ROOT env variable\n");
+        return 0;
+    }
+    DIR *dir = opendir(rootpath);
+    if (dir == NULL) {
+        printf("Missing JSFTP_ROOT env variable\n");
+        return 0;
+    }
+    closedir(dir);
+    strcpy(root_directory, rootpath);
 
     // Set IP of host machine
     set_hostip();
