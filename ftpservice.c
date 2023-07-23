@@ -23,6 +23,7 @@
  */
 void *handle_session(void *session_data) {
     client_session_t *session = session_data;
+    close_connection(&session->data_connection);
 
     // Respond connection successful
     dprintf(session->clientfd, "220 (JSftp 1.0)\r\n");

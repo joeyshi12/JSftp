@@ -1,6 +1,6 @@
 # binaries
 *.o
-JSftp
+main
 
 # test outputs
 out/
