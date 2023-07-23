@@ -58,7 +58,7 @@ typedef struct cmd_map_s {
     cmd_t cmd;
 } cmd_map_t;
 
-extern char root_directory[PATH_LEN];
+extern char *root_directory;
 extern int hostip_octets[4];
 extern cmd_map_t cmd_map[NUM_CMDS];
 

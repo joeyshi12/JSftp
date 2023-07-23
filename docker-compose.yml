@@ -1,0 +1,10 @@
+version: '3.3'
+services:
+  ftp:
+    build: ./
+    environment:
+      - FTP_ROOT=/Documents
+    ports:
+      - "2121:2121"
+    volumes:
+      - ../Documents:/Documents
